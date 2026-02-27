@@ -257,8 +257,30 @@ function getWeatherIcon(icon: string): string {
 </script>
 
 <template>
-  <div class="w-full max-w-md space-y-6">
+  <div class="w-full max-w-md space-y-6 relative">
     
+    <!-- =================================================================== -->
+    <!-- TERUG NAAR PORTFOLIO KNOP                                           -->
+    <!-- =================================================================== -->
+    <!-- 
+      Fixed position: blijft altijd links boven in beeld
+      De knop linkt naar je portfolio website
+    -->
+    <a 
+      href="https://efeaydin.netlify.app" 
+      class="fixed top-4 left-4 z-50"
+    >
+      <Button 
+        variant="outline" 
+        size="sm"
+        class="glass border-white/20 hover:bg-white/10 hover:border-primary/50
+               transition-all duration-300 hover:scale-105 gap-2"
+      >
+        <span>←</span>
+        <span>Portfolio</span>
+      </Button>
+    </a>
+
     <!-- =================================================================== -->
     <!-- HEADER MET ANIMATIES                                                -->
     <!-- =================================================================== -->
