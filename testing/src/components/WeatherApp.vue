@@ -72,8 +72,87 @@ const weather = ref<WeatherData | null>(null)
 const loading = ref(false)
 const error = ref('')
 const randomSuggestions = ref<string[]>([])  // Houdt de random stad suggesties bij
+const typoSuggestions = ref<string[]>([])    // Suggesties bij typo's
 
 const API_KEY = '9d0ed650c88bd1351c5e21dc91663227'
+
+// =============================================================================
+// FUZZY SEARCH / TYPO CORRECTIE
+// =============================================================================
+// Levenshtein Distance - meet hoeveel bewerkingen nodig zijn om string A naar B te veranderen
+// Hoe lager het getal, hoe meer de strings op elkaar lijken
+function levenshteinDistance(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase()
+  const s2 = str2.toLowerCase()
+  
+  // Initialiseer de matrix met alle waarden op 0
+  const matrix: number[][] = Array(s1.length + 1)
+    .fill(null)
+    .map(() => Array(s2.length + 1).fill(0) as number[])
+  
+  // Vul de eerste kolom (0, 1, 2, 3, ...)
+  for (let i = 0; i <= s1.length; i++) {
+    matrix[i]![0] = i
+  }
+  
+  // Vul de eerste rij (0, 1, 2, 3, ...)
+  for (let j = 0; j <= s2.length; j++) {
+    matrix[0]![j] = j
+  }
+  
+  // Vul de rest van de matrix
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      if (s1[i - 1] === s2[j - 1]) {
+        // Karakters zijn gelijk, geen extra kosten
+        matrix[i]![j] = matrix[i - 1]![j - 1]!
+      } else {
+        // Minimum van: verwijderen, invoegen, of vervangen
+        matrix[i]![j] = Math.min(
+          matrix[i - 1]![j]! + 1,     // Verwijderen
+          matrix[i]![j - 1]! + 1,     // Invoegen
+          matrix[i - 1]![j - 1]! + 1  // Vervangen
+        )
+      }
+    }
+  }
+  
+  return matrix[s1.length]![s2.length]!
+}
+
+// Vind steden die lijken op de input (fuzzy search)
+function findSimilarCities(input: string, maxResults: number = 3): string[] {
+  if (!input || input.length < 2) return []
+  
+  const inputLower = input.toLowerCase()
+  
+  // Bereken de "gelijkenis score" voor elke stad
+  const scored = worldCities.map(city => {
+    const cityLower = city.toLowerCase()
+    
+    // Combineer meerdere checks voor betere resultaten:
+    // 1. Levenshtein distance
+    const distance = levenshteinDistance(input, city)
+    
+    // 2. Begint de stad met dezelfde letters?
+    const startsWithBonus = cityLower.startsWith(inputLower.slice(0, 2)) ? -2 : 0
+    
+    // 3. Bevat de stad de input?
+    const containsBonus = cityLower.includes(inputLower) ? -3 : 0
+    
+    return {
+      city,
+      score: distance + startsWithBonus + containsBonus
+    }
+  })
+  
+  // Sorteer op score (laagste = beste match) en pak de top resultaten
+  return scored
+    .sort((a, b) => a.score - b.score)
+    .slice(0, maxResults)
+    .filter(item => item.score <= 5)  // Alleen tonen als redelijk dichtbij
+    .map(item => item.city)
+}
 
 // =============================================================================
 // RANDOM CITIES FUNCTION
@@ -131,12 +210,14 @@ const weatherEmoji = computed(() => {
 async function fetchWeather() {
   if (!city.value.trim()) {
     error.value = 'Voer een stad in'
+    typoSuggestions.value = []
     return
   }
 
   loading.value = true
   error.value = ''
   weather.value = null
+  typoSuggestions.value = []  // Reset typo suggesties
 
   try {
     const response = await fetch(
@@ -144,13 +225,18 @@ async function fetchWeather() {
     )
 
     if (!response.ok) {
-      if (response.status === 404) throw new Error('Stad niet gevonden')
+      if (response.status === 404) {
+        // Stad niet gevonden - zoek vergelijkbare steden!
+        typoSuggestions.value = findSimilarCities(city.value)
+        throw new Error('Stad niet gevonden')
+      }
       if (response.status === 401) throw new Error('Ongeldige API key')
       throw new Error('Er ging iets mis')
     }
 
     const data: WeatherData = await response.json()
     weather.value = data
+    typoSuggestions.value = []  // Wis suggesties bij success
     refreshSuggestions()  // Nieuwe random steden na elke zoekopdracht!
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Er ging iets mis'
@@ -259,17 +345,41 @@ function getWeatherIcon(icon: string): string {
     </Card>
 
     <!-- =================================================================== -->
-    <!-- ERROR MESSAGE                                                       -->
+    <!-- ERROR MESSAGE MET TYPO SUGGESTIES                                   -->
     <!-- =================================================================== -->
     <!-- 
       v-if="error" toont dit alleen als er een error is
-      animate-in fade-in slide-in-from-top: shadcn animatie classes
+      Als er typo suggesties zijn, tonen we "Bedoelde je...?" knoppen
     -->
     <Card v-if="error" class="border-destructive/50 bg-destructive/10 animate-in fade-in slide-in-from-top-2">
-      <CardContent class="pt-6">
+      <CardContent class="pt-6 space-y-4">
         <p class="text-destructive text-center font-medium">
           ❌ {{ error }}
         </p>
+        
+        <!-- Typo suggesties: "Bedoelde je...?" -->
+        <div v-if="typoSuggestions.length > 0" class="space-y-3">
+          <p class="text-center text-sm text-muted-foreground">
+            🤔 Bedoelde je misschien...
+          </p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <Button
+              v-for="(suggestion, index) in typoSuggestions"
+              :key="suggestion"
+              variant="outline"
+              size="sm"
+              @click="searchCity(suggestion)"
+              :class="[
+                'bg-white/5 border-white/20 hover:bg-white/15',
+                'hover:border-primary/50 transition-all duration-300',
+                'hover:scale-105 animate-in fade-in zoom-in'
+              ]"
+              :style="{ animationDelay: `${index * 100}ms` }"
+            >
+              {{ suggestion }}
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
 
