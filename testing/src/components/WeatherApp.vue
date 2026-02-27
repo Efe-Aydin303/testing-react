@@ -271,12 +271,14 @@ function getWeatherIcon(icon: string): string {
       class="fixed top-4 left-4 z-50"
     >
       <Button 
-        variant="outline" 
-        size="sm"
-        class="glass border-white/20 hover:bg-white/10 hover:border-primary/50
-               transition-all duration-300 hover:scale-105 gap-2"
+        size="lg"
+        class="bg-gradient-to-r from-pink-500 to-violet-600 
+               hover:from-pink-400 hover:to-violet-500
+               text-white font-semibold shadow-lg shadow-pink-500/30
+               transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-pink-500/40
+               gap-2 px-5 py-3 text-base"
       >
-        <span>←</span>
+        <span class="text-lg">←</span>
         <span>Portfolio</span>
       </Button>
     </a>
