@@ -1,0 +1,18 @@
+# Netlify configuration file
+# Dit vertelt Netlify hoe je app te builden en deployen
+
+[build]
+  # De map waar je project staat (relatief aan repo root)
+  base = "testing/"
+  
+  # Het build command
+  command = "npm run build"
+  
+  # De output folder na build (waar de statische files staan)
+  publish = "dist"
+
+# Voor Single Page Applications (SPA) - redirect alles naar index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
